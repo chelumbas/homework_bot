@@ -27,7 +27,6 @@ REQUEST_ERROR = (
     'вернул ошибку {error}'
 )
 INCORRECT_STATUS = 'Запрос вернул некорректный статус {status}.'
-FORMER_STATUS = 'Статус работы не изменился.'
 SUCCESSFUL_MESSAGE = 'Сообщение успешно отправлено.'
 TYPE_ERROR = (
     'Некорректный тип данных. Ожидался {expected_type}. '
@@ -44,6 +43,7 @@ HOMEWORK_STATUS_ERROR = (
 SEND_MESSAGE_ERROR = (
     'Не удалось отправить сообщение {message} в чат {chat_id}.'
 )
+LAST_ERROR = 'Сообщение об ошибке было отправлено.'
 
 
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
@@ -156,6 +156,7 @@ def main():
 
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
+    last_error_message = ''
 
     while True:
         try:
@@ -169,6 +170,10 @@ def main():
             logger.error(repr(tg_error))
         except Exception as error:
             message = f'Сбой в работе программы: {repr(error)}'
+            if message == last_error_message:
+                logger.info(LAST_ERROR)
+                continue
+            last_error_message = message
             try:
                 send_message(bot, message)
             except TelegramSendMessageError as tg_error:
