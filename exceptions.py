@@ -11,3 +11,8 @@ class RequestError(Exception):
 class HomeworkStatusError(Exception):
     """Новый статус домашней работы."""
     pass
+
+
+class TelegramSendMessageError(Exception):
+    """Ошибка отправки сообщения в Telegram."""
+    pass

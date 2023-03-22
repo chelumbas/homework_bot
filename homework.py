@@ -8,7 +8,12 @@ import requests
 import telegram
 from dotenv import load_dotenv
 
-from exceptions import StatusCodeError, RequestError, HomeworkStatusError
+from exceptions import (
+    StatusCodeError,
+    RequestError,
+    HomeworkStatusError,
+    TelegramSendMessageError
+)
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -32,10 +37,13 @@ KEY_ERROR = (
     'Отсутствует ключ необходимый ключ в словаре {dictionary}. '
     'Доступные ключи {received_keys}.'
 )
-INDEX_ERROR = 'Получен пустой список {received_list}.'
 HOMEWORK_STATUS_ERROR = (
     'Получен неизвестный статус {status} домашней работы. '
-    'Необходимо дополнить значения словаря {dictionary}')
+    'Необходимо дополнить значения словаря {dictionary}'
+)
+SEND_MESSAGE_ERROR = (
+    'Не удалось отправить сообщение {message} в чат {chat_id}.'
+)
 
 
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
@@ -65,6 +73,11 @@ def send_message(bot, message):
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
     except telegram.TelegramError as error:
         logger.error(error)
+        raise TelegramSendMessageError(
+            SEND_MESSAGE_ERROR.format(
+                message=message, chat_id=TELEGRAM_CHAT_ID
+            )
+        )
     else:
         logger.debug(SUCCESSFUL_MESSAGE)
 
@@ -91,9 +104,8 @@ def get_api_answer(timestamp: int) -> dict:
     return response.json()
 
 
-def check_response(response: dict) -> dict:
+def check_response(response: dict) -> list:
     """Валидирует ответ от сервиса."""
-    print(response)
     if not isinstance(response, dict):
         raise TypeError(
             TYPE_ERROR.format(
@@ -113,11 +125,7 @@ def check_response(response: dict) -> dict:
                 expected_type=list, received_type=type(homeworks)
             )
         )
-    try:
-        homework = homeworks[0]
-    except IndexError:
-        raise IndexError(INDEX_ERROR.format(received_list='homeworks'))
-    return homework
+    return homeworks
 
 
 def parse_status(homework: dict) -> str:
@@ -149,25 +157,22 @@ def main():
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
 
-    last_homework_status = ''
-    last_error_message = ''
-
     while True:
         try:
             response = get_api_answer(timestamp)
-            timestamp = response.get('current_date')
-            homework = check_response(response)
-            status = parse_status(homework)
-            if status != last_homework_status:
-                send_message(bot, status)
-                last_homework_status = status
-            else:
-                logger.debug(FORMER_STATUS)
+            homeworks = check_response(response)
+            for homework in homeworks:
+                message = parse_status(homework)
+                send_message(bot, message)
+                timestamp = response.get('current_date')
+        except TelegramSendMessageError as tg_error:
+            logger.error(repr(tg_error))
         except Exception as error:
             message = f'Сбой в работе программы: {repr(error)}'
-            if message != last_error_message:
+            try:
                 send_message(bot, message)
-                last_error_message = message
+            except TelegramSendMessageError as tg_error:
+                logger.error(repr(tg_error))
         finally:
             time.sleep(RETRY_PERIOD)
 
